@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?
+  role          String    @default("VIEWER")
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  sessions Session[]
+  accounts Account[]
+  messages Message[]      @relation("sender")
+  notes    InternalNote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+
+  @@index([userId])
+}
+
+model Account {
+  id                String @id @default(cuid())
+  userId            String
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+
+  @@unique([provider, providerAccountId])
+}
+
+model Team {
+  id   String  @id @default(cuid())
+  name String
+  slug String  @unique
+  logo String?
+
+  users    User[]
+  contacts Contact[]
+  messages Message[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  Channel   Channel[]
+}
+
+model Contact {
+  id     String @id @default(cuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  firstName   String
+  lastName    String?
+  email       String?
+  phoneNumber String?
+
+  status String   @default("ACTIVE")
+  tags   String[] @default([])
+
+  messages Message[]
+  threads  Thread[]
+  notes    InternalNote[]
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  lastMessageAt    DateTime?
+  ScheduledMessage ScheduledMessage[]
+
+  @@unique([teamId, phoneNumber])
+  @@unique([teamId, email])
+  @@index([teamId])
+}
+
+model Thread {
+  id        String  @id @default(cuid())
+  teamId    String
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  status  String   @default("OPEN")
+  subject String?
+  tags    String[] @default([])
+
+  messages Message[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastMessageAt DateTime?
+
+  @@index([teamId, status])
+  @@index([contactId])
+}
+
+model Message {
+  id        String  @id @default(cuid())
+  teamId    String
+  threadId  String
+  thread    Thread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  senderId  String?
+  sender    User?   @relation("sender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  body      String @db.Text
+  channel   String
+  direction String @default("INBOUND")
+  status    String @default("SENT")
+
+  externalId  String?
+  metadata    Json?
+  attachments Attachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  Team      Team     @relation(fields: [teamId], references: [id])
+
+  @@unique([channel, externalId])
+  @@index([threadId])
+  @@index([contactId])
+}
+
+model Attachment {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  fileName String
+  mimeType String
+  url      String @db.Text
+  size     Int
+
+  @@index([messageId])
+}
+
+model ScheduledMessage {
+  id        String  @id @default(cuid())
+  teamId    String
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  body         String   @db.Text
+  channel      String
+  scheduledFor DateTime
+
+  status String @default("PENDING")
+
+  createdAt DateTime @default(now())
+}
+
+model Channel {
+  id     String @id @default(cuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  type String
+  name String
+
+  credentials Json
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, type])
+}
+
+model InternalNote {
+  id        String   @id @default(cuid())
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  body     String  @db.Text
+  isPublic Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contactId])
+}
